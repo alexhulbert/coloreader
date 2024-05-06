@@ -51,6 +51,8 @@ export function getMockData(override = {} as Partial<ExtensionData>): ExtensionD
                 longitude: 31.021786,
             },
             detectDarkTheme: false,
+            shadowCopy: [],
+            externalConnections: []
         } as UserSettings,
         fonts: [
             'serif',
