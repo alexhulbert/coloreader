@@ -1,3 +1,4 @@
+import { DEFAULT_SETTINGS } from 'defaults';
 import type {ExtensionData, Theme, Shortcuts, UserSettings, TabInfo, TabData, Command, DevToolsData} from '../definitions';
 import createCSSFilterStylesheet from '../generators/css-filter';
 import {getDetectorHintsFor} from '../generators/detector-hints';
@@ -45,6 +46,11 @@ interface SystemColorState extends Record<string, unknown> {
 declare const __CHROMIUM_MV2__: boolean;
 declare const __CHROMIUM_MV3__: boolean;
 declare const __THUNDERBIRD__: boolean;
+
+let currentColors = {
+    bg: "",
+    fg: ""
+};
 
 export class Extension {
     private static autoState: AutomationState = '';
@@ -262,6 +268,47 @@ export class Extension {
 
         UserStorage.settings.fetchNews && Newsmaker.subscribe();
         Extension.startBarrier!.resolve();
+
+        currentColors.bg = UserStorage.settings.theme.darkSchemeBackgroundColor;
+        currentColors.fg = UserStorage.settings.theme.darkSchemeTextColor;
+        Extension.longPoll();
+    }
+
+    private static async longPoll() {
+        while (true) {
+            try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 9900 * 1000);
+                const response = await fetch('http://localhost:7520', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(currentColors),
+                    signal: controller.signal,
+                });
+                clearTimeout(timeout);
+
+                if (response.ok) {
+                    const resp = await response.json();
+                    console.log('Color update:', resp);
+                    Extension.changeSettings({
+                        theme: {
+                            ...DEFAULT_SETTINGS.theme,
+                            darkSchemeBackgroundColor: resp.bgDark,
+                            darkSchemeTextColor: resp.fgDark,
+                            lightSchemeBackgroundColor: resp.bgLight || resp.bgDark,
+                            lightSchemeTextColor: resp.fgLight || resp.fgDark,
+                        }
+                    });
+                    currentColors = {
+                        bg: resp.bgDark,
+                        fg: resp.fgDark
+                    };
+                }
+            } catch (error) {
+                console.error('Long poll failed:', error);
+                await new Promise(resolve => setTimeout(resolve, 5000)); // Wait 5s on error
+            }
+        }
     }
 
     private static getMessengerAdapter(): ExtensionAdapter {
