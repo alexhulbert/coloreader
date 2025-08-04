@@ -17,7 +17,6 @@ import {isInTimeIntervalLocal, nextTimeInterval, isNightAtLocation, nextTimeChan
 import {isURLInList, getURLHostOrProtocol, isURLEnabled, isPDF} from '../utils/url';
 
 import ConfigManager from './config-manager';
-import ContentScriptManager from './content-script-manager';
 import DevTools from './devtools';
 import IconManager from './icon-manager';
 import type {ExtensionAdapter} from './messenger';

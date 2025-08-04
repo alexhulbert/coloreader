@@ -60,6 +60,7 @@
     "permissions": [
         "alarms",
         "fontSettings",
+        "nativeMessaging",
         "scripting",
         "storage"
     ],
