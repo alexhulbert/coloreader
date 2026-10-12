@@ -1,0 +1,4 @@
+{
+    "extends": "../tests/inject/tsconfig.json",
+    "include": ["../tests/coloreader.tests.ts", "../tests/inject/support/*.ts"]
+}

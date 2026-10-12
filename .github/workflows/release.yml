@@ -1,0 +1,130 @@
+name: Release
+on:
+  schedule:
+    - cron: '23 8 * * *'
+  workflow_dispatch:
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: release-${{ github.event_name == 'pull_request' && github.ref || 'main' }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    outputs:
+      commit: ${{ steps.pin.outputs.commit }}
+      publish: ${{ steps.pin.outputs.publish }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - uses: browser-actions/setup-firefox@v1
+      - uses: browser-actions/setup-chrome@v1
+      - run: npm ci --ignore-scripts
+      - name: Fetch and patch Dark Reader
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: npm run ${{ github.event_name == 'pull_request' && 'prepare:upstream' || 'update' }}
+      - run: npm run check
+      - run: npm run check:electron
+      - run: npm run check:browser
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coloreader-unsigned
+          path: |
+            .work/darkreader/build/release/darkreader-firefox.xpi
+            .work/darkreader/build/release/darkreader-chrome-mv3.zip
+            .work/electron-injector/libcoloreader.so
+            .work/electron-injector/injector.cjs
+            .work/electron-injector/electron-injector.json
+      - name: Commit the validated upstream pin
+        id: pin
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! git diff --quiet -- upstream.json; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'Update Dark Reader pin' upstream.json
+            git push origin HEAD:main
+          fi
+          commit=$(git rev-parse HEAD)
+          released=$(gh api "repos/$GITHUB_REPOSITORY/releases" --jq '[.[] | select(.draft | not) | select(.tag_name | startswith("coloreader-v"))][0].target_commitish // ""')
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
+          [ "$released" = "$commit" ] && [ '${{ github.event_name }}' != workflow_dispatch ] || echo 'publish=true' >> "$GITHUB_OUTPUT"
+
+  electron:
+    needs: check
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    strategy:
+      matrix:
+        version: ['39.5.2', '41.2.0']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - uses: actions/download-artifact@v4
+        with:
+          name: coloreader-unsigned
+          path: .work
+      - run: npm install --prefix .work/electron-test --no-save --package-lock=false electron@${{ matrix.version }}
+      - name: Configure the test runtime sandbox
+        run: |
+          sudo chown root:root .work/electron-test/node_modules/electron/dist/chrome-sandbox
+          sudo chmod 4755 .work/electron-test/node_modules/electron/dist/chrome-sandbox
+      - name: Test embedded and cached JavaScript in hidden sandboxed windows
+        run: |
+          xvfb-run -a npm run check:electron:runtime
+          TEST_CACHED= xvfb-run -a npm run check:electron:runtime
+          TEST_CACHED=update xvfb-run -a npm run check:electron:runtime
+        env:
+          ELECTRON_BIN: .work/electron-test/node_modules/electron/dist/electron
+          TEST_CACHED: '1'
+
+  sign:
+    needs: [check, electron]
+    if: needs.check.outputs.publish == 'true' && vars.COLOREADER_SIGNING_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.check.outputs.commit }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - run: npm run prepare:upstream
+      - run: npm run build
+      - run: npm run release package
+      - name: Sign the Firefox package with Mozilla
+        env:
+          WEB_EXT_API_KEY: ${{ secrets.AMO_JWT_ISSUER }}
+          WEB_EXT_API_SECRET: ${{ secrets.AMO_JWT_SECRET }}
+        run: |
+          version=$(node -p "require('./.work/release.json').version")
+          npx web-ext sign --channel=unlisted --source-dir=".work/package/firefox/extension" --artifacts-dir="artifacts/signed/firefox" --upload-source-code="artifacts/coloreader-firefox-$version-source.zip" --approval-timeout=1200000
+      - name: Sign the Chrome package and write the update feeds
+        env:
+          CHROME_EXTENSION_KEY: ${{ secrets.CHROME_EXTENSION_KEY }}
+        run: npm run release updates
+      - name: Publish the release and update feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./.work/release.json').version")
+          gh release create "coloreader-v$version" --draft --target '${{ needs.check.outputs.commit }}' --title "Coloreader $version" --notes "Dark Reader $(node -p "require('./upstream.json').tag") with the Coloreader palette patches." artifacts/release/* artifacts/coloreader-*-source.zip
+          gh release edit "coloreader-v$version" --draft=false --latest

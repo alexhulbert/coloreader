@@ -1,0 +1,29 @@
+{
+  "name": "coloreader",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "prepare:upstream": "node scripts/upstream.mjs prepare",
+    "update": "node scripts/upstream.mjs prepare --latest",
+    "patch": "node scripts/upstream.mjs patch",
+    "check": "npm run patch && cd .work/darkreader && npx jest --config tests/unit/jest.config.mjs --testMatch '<rootDir>/tests/{bridge,palette}.tests.ts' && npx eslint src/coloreader tests/*.tests.ts",
+    "check:browser": "cd .work/darkreader && FIREFOX_TEST=1 CHROME_TEST=1 npx karma start coloreader/karma.conf.cjs --ci",
+    "build": "node scripts/build.mjs",
+    "build:electron": "npm run patch && node electron-injector/build.mjs",
+    "check:electron": "node --test electron-injector/tests/*.test.mjs",
+    "check:electron:runtime": "node electron-injector/tests/test-runtime.mjs",
+    "release": "node scripts/release.mjs"
+  },
+  "coloreader": {
+    "repository": "alexhulbert/coloreader",
+    "firefoxId": "darkreader@alexhulbert.com"
+  },
+  "devDependencies": {
+    "@getgrit/gritql": "0.0.3",
+    "crx": "^5.0.1",
+    "web-ext": "10.7.0"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}

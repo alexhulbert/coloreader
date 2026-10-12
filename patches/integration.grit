@@ -1,0 +1,180 @@
+engine marzano(0.1)
+language js
+
+pattern default_theme() {
+    `immediateModify: false` => `immediateModify: false,
+    paletteMode: true`
+}
+
+pattern default_settings() {
+    or {
+        `changeBrowserTheme: false` => `changeBrowserTheme: true`,
+        `detectDarkTheme: true` => `detectDarkTheme: false`
+    }
+}
+
+pattern theme_type() {
+    `immediateModify: boolean` => `immediateModify: boolean;
+    paletteMode?: boolean`
+}
+
+pattern validate_palette() {
+    `validateProperty(theme, 'immediateModify', isBoolean, DEFAULT_THEME)` =>
+    `validateProperty(theme, 'immediateModify', isBoolean, DEFAULT_THEME);
+    validateProperty(theme, 'paletteMode', isBoolean, DEFAULT_THEME)`
+}
+
+// Route backgrounds, text, borders and shadows through the palette engine.
+
+pattern color_import() {
+    `import type {Theme} from '../../definitions';` =>
+    `import type {Theme} from '../../definitions';
+    import {paletteBackground, paletteText, paletteBorder, paletteShadow} from '../../coloreader/colors';`
+}
+
+pattern background_color() {
+    `function _modifyBackgroundColor($rgb: RGBA, $theme: Theme) { $body }` =>
+    `function _modifyBackgroundColor($rgb: RGBA, $theme: Theme) {
+        if ($theme.paletteMode) {
+            return modifyColorWithCache($rgb, $theme, paletteBackground, getBgPole($theme), getFgPole($theme));
+        }
+        $body
+    }`
+}
+
+pattern foreground_color() {
+    `function _modifyForegroundColor($rgb: RGBA, $theme: Theme) { $body }` =>
+    `function _modifyForegroundColor($rgb: RGBA, $theme: Theme) {
+        if ($theme.paletteMode) {
+            return modifyColorWithCache($rgb, $theme, paletteText, getBgPole($theme), getFgPole($theme));
+        }
+        $body
+    }`
+}
+
+pattern border_color() {
+    `function _modifyBorderColor($rgb: RGBA, $theme: Theme) { $body }` =>
+    `function _modifyBorderColor($rgb: RGBA, $theme: Theme) {
+        if ($theme.paletteMode) {
+            return modifyColorWithCache($rgb, $theme, paletteBorder, getBgPole($theme), getFgPole($theme));
+        }
+        $body
+    }`
+}
+
+pattern shadow_color() {
+    `function modifyShadowColor($rgb: RGBA, $theme: Theme): string { $body }` =>
+    `function modifyShadowColor($rgb: RGBA, $theme: Theme): string {
+        if ($theme.paletteMode) {
+            return modifyColorWithCache($rgb, $theme, paletteShadow, getBgPole($theme), getFgPole($theme));
+        }
+        $body
+    }`
+}
+
+// Make generated CSS and native controls follow the target mode.
+
+pattern image_import() {
+    `import type {Theme} from '../../definitions';` =>
+    `import type {Theme} from '../../definitions';
+    import {paletteImageValue} from '../../coloreader/images';`
+}
+
+pattern native_controls() {
+    `(__CHROMIUM_MV3__ || isCSSColorSchemePropSupported) && theme.mode === 1` =>
+    `__CHROMIUM_MV3__ || isCSSColorSchemePropSupported`
+}
+
+pattern native_control_scheme() {
+    js"`    color-scheme: dark !important;`" =>
+    js"`    color-scheme: ${theme.mode === 1 ? 'dark' : 'light'} !important;`"
+}
+
+pattern link_color() {
+    js"lines.push('a {');" =>
+    js"if (theme.paletteMode && theme.selectionColor !== 'auto') {
+        lines.push(`a { color: ${theme.selectionColor} !important; }`);
+    }
+    lines.push('a {');"
+}
+
+pattern css_color_scheme() {
+    `theme.mode === 0 ? 'dark light' : 'dark'` => `theme.mode === 0 ? 'light' : 'dark'`
+}
+
+pattern scrollbar_thumb() {
+    `modifyBackgroundColor({r: 176, g: 176, b: 176}, theme)` => `modifyBorderColor({r: 128, g: 128, b: 128}, theme)`
+}
+
+pattern background_images() {
+    `const getBgImageValue = (imageDetails: ImageDetails, theme: Theme) => { $body }` =>
+    `const getBgImageValue = (imageDetails: ImageDetails, theme: Theme) => {
+        if (theme.paletteMode) {
+            return paletteImageValue(imageDetails, theme, canFilterImage(imageDetails.src));
+        }
+        $body
+    }`
+}
+
+pattern inline_svg() {
+    `isSVGElement && theme.mode === 1 && svg` => `isSVGElement && theme.mode === 1 && !theme.paletteMode && svg`
+}
+
+pattern inline_cache_keys() {
+    `const themeProps: Array<keyof Theme> = [$keys]` =>
+    `const themeProps: Array<keyof Theme> = [$keys, 'darkSchemeBackgroundColor', 'darkSchemeTextColor', 'lightSchemeBackgroundColor', 'lightSchemeTextColor']`
+}
+
+pattern inline_cache_invalidation() {
+    `themeKey = ''` as $assignment where {
+        $assignment <: within function_declaration(name=`getThemeKey`),
+        $assignment => `inlineStringValueCache.clear();
+        themeKey = ''`
+    }
+}
+
+pattern palette_cache_without_fixes() {
+    `prevTheme && prevFixes` => `prevTheme`
+}
+
+pattern pdf_overlay_target() {
+    `isEdge ? tryInvertEdgePDF() : tryInvertChromePDF()` =>
+    `theme!.mode === 1 && (isEdge ? tryInvertEdgePDF() : tryInvertChromePDF())`
+}
+
+pattern integration_import() {
+    `import UserStorage from './user-storage';` =>
+    `import UserStorage from './user-storage';
+    import {startPaletteIntegration, browserTheme} from '../coloreader/integration';`
+}
+
+pattern start_palette() {
+    `Extension.updateAutoState()` as $call where {
+        $call <: within method_definition(name=`start`),
+        $call => `startPaletteIntegration(UserStorage, Extension.setTheme, Extension.changeSettings);
+        Extension.updateAutoState()`
+    }
+}
+
+pattern browser_colors() {
+    `setWindowTheme(UserStorage.settings.theme)` =>
+    `setWindowTheme(browserTheme(UserStorage.settings.theme, Extension.autoState))`
+}
+
+pattern browser_light_target() {
+    `Extension.isExtensionSwitchedOn() && Extension.autoState !== 'scheme-light'` => `Extension.isExtensionSwitchedOn()`
+}
+
+pattern pdf_target() {
+    `UserStorage.settings.enableForPDF` as $flag where {
+        $flag <: within call_expression(function=`getDynamicThemeFixesFor`),
+        $flag => `UserStorage.settings.enableForPDF && theme.mode === 1`
+    }
+}
+
+pattern stub_imports() {
+    `import $what from $path` where {
+        $path <: r"'([a-z].*)'"($module),
+        $path => `'../../$module'`
+    }
+}

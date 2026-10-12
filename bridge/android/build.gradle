@@ -1,0 +1,23 @@
+plugins { id 'com.android.application' version '9.3.1' }
+android {
+    namespace 'com.alexhulbert.coloreader.bridge'
+    compileSdk 35
+    defaultConfig {
+        applicationId 'com.alexhulbert.coloreader.bridge'
+        minSdk 31
+        targetSdk 35
+        versionCode 7
+        versionName '0.7'
+    }
+    if (providers.gradleProperty('developmentSigning').orNull == 'true') {
+        buildTypes.release.signingConfig = signingConfigs.debug
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+}
+dependencies {
+    implementation 'org.java-websocket:Java-WebSocket:1.6.0'
+    implementation 'org.slf4j:slf4j-nop:2.0.16'
+}

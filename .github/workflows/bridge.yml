@@ -1,0 +1,60 @@
+name: Bridges
+on:
+  push:
+    paths: ['bridge/**', '.github/workflows/bridge.yml']
+  pull_request:
+    paths: ['bridge/**', '.github/workflows/bridge.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.6.1'
+      - run: sdkmanager 'platforms;android-35' 'build-tools;36.0.0'
+      - run: gradle assembleRelease lintRelease
+        working-directory: bridge/android
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coloreader-bridge-android-unsigned
+          path: bridge/android/build/outputs/apk/release/*-unsigned.apk
+      - name: Sign the APK and publish it under the rolling `bridge` tag
+        if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+        run: |
+          test -n "$ANDROID_KEYSTORE" || { echo 'No ANDROID_KEYSTORE secret; not publishing.'; exit 0; }
+          echo "$ANDROID_KEYSTORE" | base64 -d > keystore.jks
+          "$ANDROID_HOME"/build-tools/36.0.0/apksigner sign --ks keystore.jks --ks-pass env:ANDROID_KEYSTORE_PASSWORD --out coloreader-bridge.apk bridge/android/build/outputs/apk/release/*-unsigned.apk
+          version=$(grep -oP "versionName '\K[^']+" bridge/android/build.gradle)
+          gh release delete bridge --cleanup-tag --yes || true
+          gh release create bridge --latest=false --target "$GITHUB_SHA" --title "Coloreader Bridge $version" --notes 'Android bridge. The extension releases are the coloreader-v* tags.' coloreader-bridge.apk
+
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - run: cargo test --locked
+        working-directory: bridge/linux
+      - run: cargo build --release
+        working-directory: bridge/linux
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coloreader-bridge-linux
+          path: bridge/linux/target/release/coloreader-bridge
