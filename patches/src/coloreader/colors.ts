@@ -31,15 +31,12 @@ function contrast(a: number, b: number): number {
     return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
 }
 
-// Map neutral colors exactly to the palette so chromakey transparency still works.
+// Tint neutral colors with the palette while retaining lightness variation.
 // Fit colored accents to their CSS role while keeping their hue and alpha.
 function recolor(source: HSLA, background: HSLA, foreground: HSLA, role: Role): HSLA {
     // Near black or white, high HSL saturation can still mean very little color.
     const chroma = (1 - Math.abs(2 * source.l - 1)) * source.s;
     const isChromatic = source.s >= 0.12 && chroma >= 0.08 && source.l > 0.02 && source.l < 0.98;
-    if (!isChromatic && role !== 'border') {
-        return {...(role === 'background' ? background : foreground), a: source.a};
-    }
     const bg = linearRGB(background);
     const fg = linearRGB(foreground);
     const bgY = luminance(bg);

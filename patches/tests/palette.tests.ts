@@ -33,6 +33,23 @@ describe.each([0, 1] as const)('palette mapping to target %i', (mode) => {
         }
     });
 
+    it('preserves neutral surface and muted text distinctions within the palette', () => {
+        const sources = ['#000000', '#111111', '#303030', '#707070'];
+        const backgrounds = sources.map((source) => modifyBackgroundColor(rgb(source), target, false));
+        const texts = sources.map((source) => modifyForegroundColor(rgb(source), target, false));
+        expect(new Set(backgrounds).size).toBe(sources.length);
+        expect(new Set(texts).size).toBe(sources.length);
+        for (let i = 1; i < sources.length; i++) {
+            if (mode) {
+                expect(luminance(backgrounds[i])).toBeGreaterThan(luminance(backgrounds[i - 1]));
+                expect(luminance(texts[i])).toBeLessThan(luminance(texts[i - 1]));
+            } else {
+                expect(luminance(backgrounds[i])).toBeLessThan(luminance(backgrounds[i - 1]));
+                expect(luminance(texts[i])).toBeGreaterThan(luminance(texts[i - 1]));
+            }
+        }
+    });
+
     it('keeps opaque text readable on opaque surfaces across source hues', () => {
         const sources = ['#000000', '#ffffff', '#808080', '#202020', '#eeeeee', '#ff0000', '#00ff00', '#0000ff', '#ffff00', '#00ffff', '#ff00ff'];
         for (const background of sources) {
@@ -54,26 +71,27 @@ describe.each([0, 1] as const)('palette mapping to target %i', (mode) => {
     });
 });
 
-it('keeps neutral page and Firefox chrome colors exactly at the chromakey poles', () => {
+it('tints near-neutral page colors without flattening them to the palette poles', () => {
     const target = {...theme, darkSchemeBackgroundColor: '#23001e', darkSchemeTextColor: '#f9d1ea'};
     // Colors from Wikipedia's dark theme and Firefox's UI.
-    for (const source of ['#101418', '#111111', '#707070', '#d3d3d3', '#cccccc', '#faf8f7']) {
-        expect(modifyBackgroundColor(rgb(source), target, false)).toBe('#23001e');
-        expect(modifyForegroundColor(rgb(source), target, false)).toBe('#f9d1ea');
-        expect(modifyBackgroundColor(rgb(source), {...target, mode: 0}, false)).toBe(theme.lightSchemeBackgroundColor);
-        expect(modifyForegroundColor(rgb(source), {...target, mode: 0}, false)).toBe(theme.lightSchemeTextColor);
+    const sources = ['#101418', '#111111', '#707070', '#d3d3d3', '#cccccc', '#faf8f7'];
+    for (const mode of [0, 1] as const) {
+        for (const modify of [modifyBackgroundColor, modifyForegroundColor]) {
+            const colors = sources.map((source) => modify(rgb(source), {...target, mode}, false));
+            // Very small differences can round to the same 8-bit color.
+            expect(new Set(colors).size).toBeGreaterThan(1);
+        }
     }
-    expect(rgb(modifyBackgroundColor(rgb('rgba(16, 20, 24, 0.4)'), target, false))).toEqual({r: 35, g: 0, b: 30, a: 0.4});
+    expect(rgb(modifyBackgroundColor(rgb('rgba(16, 20, 24, 0.4)'), target, false)).a).toBe(0.4);
 });
 
-it('sends exact palette colors to Firefox chrome', () => {
+it('keeps Firefox chrome surfaces distinct within the palette', () => {
     const update = jest.fn();
     Object.assign(globalThis, {browser: {theme: {update}}});
     setWindowTheme({...theme, darkSchemeBackgroundColor: '#23001e', darkSchemeTextColor: '#f9d1ea'});
     const {colors} = update.mock.calls[0][0];
-    for (const key of ['frame', 'toolbar', 'toolbar_field', 'popup', 'sidebar']) {
-        expect(colors[key]).toBe('#23001e');
-    }
+    expect(new Set([colors.frame, colors.toolbar, colors.toolbar_field, colors.popup]).size).toBe(4);
+    expect(colors.sidebar).toBe(colors.popup);
     for (const key of ['tab_background_text', 'toolbar_field_text', 'popup_text', 'sidebar_text']) {
         expect(colors[key]).toBe('#f9d1ea');
     }

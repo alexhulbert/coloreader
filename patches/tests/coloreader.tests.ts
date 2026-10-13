@@ -2,7 +2,9 @@ import './inject/support/polyfills';
 import {DEFAULT_THEME} from '../src/defaults';
 import {createOrUpdateDynamicTheme, removeDynamicTheme} from '../src/inject/dynamic-theme';
 import {paletteImageAction} from '../src/coloreader/images';
+import {modifyBackgroundColor, modifyForegroundColor} from '../src/inject/dynamic-theme/modify-colors';
 import type {ImageDetails} from '../src/inject/dynamic-theme/image';
+import {parseColorWithCache, rgbToString} from '../src/utils/color';
 import {timeout} from './inject/support/test-utils';
 
 describe('COLOREADER', () => {
@@ -23,11 +25,18 @@ describe('COLOREADER', () => {
                 <div class="dark">Dark source <input value="Native control"></div>
                 <div class="light">Light source</div>
                 <div class="inline" style="background: #000; color: #fff">Inline</div>`;
-            createOrUpdateDynamicTheme({...base, mode}, null, false);
+            const target = {...base, mode};
+            createOrUpdateDynamicTheme(target, null, false);
             await timeout(100);
             const bg = mode ? 'rgb(24, 32, 48)' : 'rgb(240, 232, 216)';
             const fg = mode ? 'rgb(232, 224, 208)' : 'rgb(32, 40, 48)';
-            for (const selector of ['.dark', '.light', '.inline']) {
+            const styleColor = (color: string) => rgbToString(parseColorWithCache(color)!);
+            const darkStyle = getComputedStyle(document.querySelector('.dark')!);
+            expect(darkStyle.backgroundColor).toBe(styleColor(modifyBackgroundColor(parseColorWithCache('#101418')!, target, false)));
+            expect(darkStyle.color).toBe(styleColor(modifyForegroundColor(parseColorWithCache('#eaecf0')!, target, false)));
+            expect(darkStyle.backgroundColor).not.toBe(bg);
+            expect(darkStyle.color).not.toBe(fg);
+            for (const selector of ['.light', '.inline']) {
                 const style = getComputedStyle(document.querySelector(selector)!);
                 expect(style.backgroundColor).withContext(selector).toBe(bg);
                 expect(style.color).withContext(selector).toBe(fg);
