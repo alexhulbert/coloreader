@@ -38,6 +38,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: coloreader-unsigned
+          include-hidden-files: true
+          if-no-files-found: error
           path: |
             .work/darkreader/build/release/darkreader-firefox.xpi
             .work/darkreader/build/release/darkreader-chrome-mv3.zip
