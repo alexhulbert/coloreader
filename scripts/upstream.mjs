@@ -20,11 +20,13 @@ const patches = {
     'src/defaults.ts': ['default_theme', 'default_settings'],
     'src/definitions.d.ts': ['theme_type'],
     'src/utils/validation.ts': ['validate_palette'],
-    'src/inject/dynamic-theme/modify-colors.ts': ['color_import', 'background_color', 'foreground_color', 'border_color', 'shadow_color'],
-    'src/inject/dynamic-theme/modify-css.ts': ['image_import', 'native_controls', 'native_control_scheme', 'link_color', 'css_color_scheme', 'scrollbar_thumb', 'background_images'],
+    'src/inject/dynamic-theme/modify-colors.ts': ['color_import', 'palette_color_cache_keys', 'palette_color_context', 'background_color', 'foreground_color', 'border_color', 'shadow_color'],
+    'src/inject/dynamic-theme/modify-css.ts': ['image_import', 'native_controls', 'native_control_scheme', 'canvas_color', 'link_color', 'css_color_scheme', 'scrollbar_thumb', 'palette_default_colors', 'background_images'],
+    'src/inject/dynamic-theme/adopted-style-manger.ts': ['palette_adopted_cleanup'],
     'src/inject/dynamic-theme/inline-style.ts': ['inline_svg', 'inline_cache_keys', 'inline_cache_invalidation'],
-    'src/inject/dynamic-theme/index.ts': ['palette_cache_without_fixes', 'pdf_overlay_target'],
+    'src/inject/dynamic-theme/index.ts': ['palette_cache_without_fixes', 'palette_render_updates', 'pdf_overlay_target', 'palette_source_import', 'palette_source_theme', 'palette_source_watch', 'palette_source_stop', 'palette_adopted_rebuild', 'palette_neutral_background', 'palette_neutral_text', 'palette_template_colors'],
     'src/background/extension.ts': ['integration_import', 'start_palette', 'browser_colors', 'browser_light_target', 'pdf_target'],
+    'src/background/window-theme.ts': ['browser_palette_import', 'browser_palette_colors'],
     'src/stubs/utils/theme.ts': ['stub_imports'],
 };
 

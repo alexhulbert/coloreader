@@ -26,3 +26,24 @@ export function browserTheme(theme: Theme, automation: string): Theme {
     }
     return theme;
 }
+
+export function browserPaletteColors(theme: Theme, colors: Record<string, string>): Record<string, string> {
+    if (!theme.paletteMode) {
+        return colors;
+    }
+    const background = theme.mode === 1 ? theme.darkSchemeBackgroundColor : theme.lightSchemeBackgroundColor;
+    const foreground = theme.mode === 1 ? theme.darkSchemeTextColor : theme.lightSchemeTextColor;
+    return {
+        ...colors,
+        accentcolor: background,
+        frame: background,
+        frame_inactive: background,
+        toolbar: background,
+        tab_selected: background,
+        tab_text: foreground,
+        tab_background_text: foreground,
+        textcolor: foreground,
+        toolbar_text: foreground,
+        icons: foreground,
+    };
+}

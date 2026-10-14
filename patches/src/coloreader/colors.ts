@@ -1,8 +1,8 @@
+import type {Theme} from '../definitions';
 import type {HSLA} from '../utils/color';
-import {hslToRGB, rgbToHSL} from '../utils/color';
+import {hslToRGB, rgbToHSL, parseToHSLWithCache} from '../utils/color';
 
 type LinearRGB = [number, number, number];
-type Role = 'background' | 'text' | 'border';
 
 function linearize(value: number): number {
     value /= 255;
@@ -27,62 +27,98 @@ function mix(a: LinearRGB, b: LinearRGB, amount: number): LinearRGB {
     return a.map((value, i) => value + (b[i] - value) * amount) as LinearRGB;
 }
 
-function contrast(a: number, b: number): number {
-    return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+export function sourceTextPole(background: HSLA): HSLA {
+    // Use black or white, whichever contrasts more with the page background
+    const light = luminance(linearRGB(background)) < Math.sqrt(0.05 * 1.05) - 0.05;
+    return {h: 0, s: 0, l: light ? 1 : 0, a: 1};
 }
 
-// Tint neutral colors with the palette while retaining lightness variation.
-// Fit colored accents to their CSS role while keeping their hue and alpha.
-function recolor(source: HSLA, background: HSLA, foreground: HSLA, role: Role): HSLA {
-    // Near black or white, high HSL saturation can still mean very little color.
-    const chroma = (1 - Math.abs(2 * source.l - 1)) * source.s;
-    const isChromatic = source.s >= 0.12 && chroma >= 0.08 && source.l > 0.02 && source.l < 0.98;
+function fitHue(source: HSLA, target: number): HSLA {
+    let low = 0;
+    let high = 1;
+    let best = source;
+    let error = Math.abs(luminance(linearRGB(best)) - target);
+    for (let i = 0; i < 16; i++) {
+        const candidate = {...source, l: (low + high) / 2};
+        const value = luminance(linearRGB(candidate));
+        if (Math.abs(value - target) < error) {
+            best = candidate;
+            error = Math.abs(value - target);
+        }
+        if (value < target) {
+            low = candidate.l;
+        } else {
+            high = candidate.l;
+        }
+    }
+    return best;
+}
+
+// Scale contrast ratios with one log luminance curve until colors clip
+export function mapPaletteColor(source: HSLA, background: HSLA, foreground: HSLA, sourceBackground: HSLA, keepHue: boolean): HSLA {
+    if (source.h === sourceBackground.h && source.s === sourceBackground.s && source.l === sourceBackground.l) {
+        return {...background, a: source.a};
+    }
     const bg = linearRGB(background);
     const fg = linearRGB(foreground);
     const bgY = luminance(bg);
     const fgY = luminance(fg);
-    const relief = 2 * Math.min(source.l, 1 - source.l);
-
-    // Leave room for accents while keeping 4.5:1 text contrast where the palette allows it.
-    let range = 0.08;
-    while (range > 0.001 && contrast(bgY + (fgY - bgY) * range, fgY + (bgY - fgY) * range) < 4.5) {
-        range /= 2;
+    const sourceBgY = luminance(linearRGB(sourceBackground));
+    const sourceY = luminance(linearRGB(source));
+    const sourceFgY = sourceTextPole(sourceBackground).l;
+    const progress = Math.log((sourceY + 0.05) / (sourceBgY + 0.05)) / Math.log((sourceFgY + 0.05) / (sourceBgY + 0.05));
+    const target = Math.max(0, Math.min(1, Math.exp(Math.log(bgY + 0.05) + progress * Math.log((fgY + 0.05) / (bgY + 0.05))) - 0.05));
+    if (keepHue) {
+        return fitHue(source, target);
     }
-    if (contrast(bgY, fgY) < 4.5) {
-        range = 0;
-    }
-    const amount = role === 'background' ? range * relief : role === 'text' ? 1 - range * relief : 0.25 + 0.2 * relief;
+    const amount = bgY === fgY ? 0 : Math.max(0, Math.min(1, (target - bgY) / (fgY - bgY)));
     let result = mix(bg, fg, amount);
-
-    // Shift the source toward black or white to reach the target luminance.
-    if (isChromatic) {
-        const original = linearRGB(source);
-        const current = luminance(original);
-        const target = luminance(result);
-        result = target < current
-            ? mix([0, 0, 0], original, target / current)
-            : mix(original, [1, 1, 1], (target - current) / (1 - current));
+    const current = luminance(result);
+    // Keep colors outside the palette range distinct
+    if (target < current) {
+        result = mix([0, 0, 0], result, target / current);
+    } else if (target > current) {
+        result = mix(result, [1, 1, 1], (target - current) / (1 - current));
     }
-
     const [r, g, b] = result.map(encode);
     return rgbToHSL({r, g, b, a: source.a});
 }
 
-export function paletteBackground(source: HSLA, background: HSLA, foreground: HSLA): HSLA {
-    return recolor(source, background, foreground, 'background');
+export function paletteColor(source: HSLA, modified: HSLA, background: HSLA, foreground: HSLA, sourceBackground?: HSLA, surface = false): HSLA {
+    // Near black or white, high HSL saturation can still mean little color
+    const chroma = (1 - Math.abs(2 * source.l - 1)) * source.s;
+    const keepHue = source.s >= 0.3 && chroma > (surface ? 0.15 : 0.01);
+    if (sourceBackground) {
+        return mapPaletteColor(source, background, foreground, sourceBackground, keepHue);
+    }
+    // Use Dark Reader's tone conversion for Firefox's UI
+    if (source.s >= 0.3 && chroma > 0.01) {
+        return {...modified, h: source.h, s: source.s};
+    }
+    if (background.l === foreground.l) {
+        return modified;
+    }
+    const bg = hslToRGB(background);
+    const fg = hslToRGB(foreground);
+    const amount = Math.max(0, Math.min(1, (modified.l - background.l) / (foreground.l - background.l)));
+    const {h, s} = rgbToHSL({r: bg.r + (fg.r - bg.r) * amount, g: bg.g + (fg.g - bg.g) * amount, b: bg.b + (fg.b - bg.b) * amount, a: source.a});
+    return {...modified, h, s};
 }
 
-export function paletteText(source: HSLA, background: HSLA, foreground: HSLA): HSLA {
-    return recolor(source, background, foreground, 'text');
+type PaletteModifier = (source: HSLA, background: HSLA, foreground: HSLA, canvas?: HSLA) => HSLA;
+
+// Reuse callbacks so Dark Reader can cache their results
+export function paletteModifier(fallback: PaletteModifier, surface = false): PaletteModifier {
+    return (source, background, foreground, canvas) => paletteColor(source, canvas ? source : fallback(source, background, foreground), background, foreground, canvas, surface);
 }
 
-export function paletteBorder(source: HSLA, background: HSLA, foreground: HSLA): HSLA {
-    return recolor(source, background, foreground, 'border');
+export function withPaletteSource(modify: PaletteModifier, source: HSLA, background: HSLA, foreground: HSLA, theme: Theme): HSLA {
+    const canvas = theme.paletteMode && theme.paletteSourceBackground ? parseToHSLWithCache(theme.paletteSourceBackground)! : undefined;
+    return modify(source, background, foreground, canvas);
 }
 
-// Shadows should stay dark even when the target palette is light.
+// Shadows should stay dark even when the target palette is light
 export function paletteShadow(source: HSLA, background: HSLA, foreground: HSLA): HSLA {
-    return luminance(linearRGB(background)) < luminance(linearRGB(foreground))
-        ? recolor(source, background, foreground, 'background')
-        : recolor(source, foreground, background, 'background');
+    const pole = background.l < foreground.l ? background : foreground;
+    return {...pole, l: Math.min(source.l, pole.l), a: source.a};
 }

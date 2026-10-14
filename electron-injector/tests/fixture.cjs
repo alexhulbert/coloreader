@@ -66,7 +66,7 @@ app.whenReady().then(async () => {
     for (const win of windows) await colors(win.webContents, ...light, 'reconnect');
     await windows[0].webContents.executeJavaScript("document.body.innerHTML += '<div style=\"background:#fff;color:#000\">dynamic</div>'");
     await delay(100); // wait for the inline-style observer
-    assert.equal(await windows[0].webContents.executeJavaScript('getComputedStyle(document.body.lastElementChild).backgroundColor'), light[0], 'dynamic inline style');
+    assert.equal(await windows[0].webContents.executeJavaScript('getComputedStyle(document.body.lastElementChild).backgroundColor'), light[1], 'opposite-tone dynamic inline style on a dark source canvas');
     await load(windows[0], 'dark', "default-src 'none'; script-src 'none'; style-src 'nonce-fixture'");
     await colors(windows[0].webContents, ...light, 'strict CSP');
     await windows[0].webContents.executeJavaScript(`{
@@ -79,10 +79,11 @@ app.whenReady().then(async () => {
     let external;
     for (let i = 0; i < 200; i++) {
         external = await windows[0].webContents.executeJavaScript('getComputedStyle(document.querySelector(".external")).backgroundColor');
-        if (external === light[0]) break;
+        if (external !== 'rgb(0, 0, 0)') break;
         await delay(25);
     }
-    assert.equal(external, light[0], 'cross-origin stylesheet was not recolored');
+    assert.notEqual(external, 'rgb(0, 0, 0)', 'cross-origin stylesheet was not recolored');
+    assert.notEqual(external, light[0], 'cross-origin surface collapsed into the canvas');
     console.log(JSON.stringify({complete: true, electron: process.versions.electron}));
     app.exit(0);
 }).catch((error) => { console.error(error.stack); app.exit(1); });

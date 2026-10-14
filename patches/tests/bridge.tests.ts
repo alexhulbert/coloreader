@@ -1,7 +1,7 @@
 import {DEFAULT_SETTINGS, DEFAULT_THEME} from '../src/defaults';
 import type {Theme, UserSettings} from '../src/definitions';
 import {parseBridgePalette, startBridgePalette} from '../src/coloreader/bridge';
-import {startPaletteIntegration} from '../src/coloreader/integration';
+import {browserTheme, startPaletteIntegration} from '../src/coloreader/integration';
 import {AutomationMode} from '../src/utils/automation';
 
 const palette = {v: 1, bgDark: '#401714', fgDark: '#ffefed', bgLight: '#fcd5d0', fgLight: '#4a201c'};
@@ -169,4 +169,9 @@ it('lets the system mode override a conflicting Firefox automation rule', () => 
     Socket.instances[0].receive({...palette, mode: 'dark'});
     expect(changeSettings).toHaveBeenCalledTimes(1);
     expect(apply).toHaveBeenCalledWith({...parsed, mode: 1});
+});
+
+it('applies the automated scheme to the browser theme', () => {
+    expect(browserTheme(DEFAULT_THEME, 'scheme-light').mode).toBe(0);
+    expect(browserTheme({...DEFAULT_THEME, mode: 0}, 'scheme-dark').mode).toBe(1);
 });
