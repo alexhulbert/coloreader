@@ -38,8 +38,10 @@ async function packageFirefox(version) {
     // Include the patched source so Mozilla can rebuild the XPI.
     const source = resolve(staging('firefox'), 'source/darkreader');
     const patches = resolve(root, 'patches');
+    const list = (...args) => execFileSync('git', ['ls-files', '-z', ...args], {cwd: upstream, encoding: 'utf8'}).split('\0').filter(Boolean);
     const files = new Set([
-        ...execFileSync('git', ['ls-files', '-z'], {cwd: upstream, encoding: 'utf8'}).split('\0').filter(Boolean),
+        ...list(),
+        ...list('--others', '--exclude-standard', '--', 'src'),
         ...(await readdir(patches, {recursive: true, withFileTypes: true})).filter((entry) => entry.isFile()).map((entry) => relative(patches, resolve(entry.parentPath, entry.name))),
     ]);
     for (const file of files) {

@@ -1,7 +1,7 @@
 import {parseBridgePalette} from '../patches/src/coloreader/bridge.ts';
 import {randomUUID} from 'node:crypto';
 import * as fs from 'node:fs';
-import {tmpdir} from 'node:os';
+import {homedir, tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {readLimited} from './http.mjs';
 
@@ -34,11 +34,20 @@ export function documentScript(core) {
     })();`;
 }
 
-export function startElectronInjector(core, renderer, {app, ipcMain, nativeTheme, webContents}) {
+export function startElectronInjector(core, renderer, {app, ipcMain, nativeTheme, webContents}, scripts) {
     const channel = `coloreader:${randomUUID()}`;
     const directory = fs.mkdtempSync(join(process.env.XDG_RUNTIME_DIR || tmpdir(), 'coloreader-'));
     const preload = join(directory, 'preload.cjs');
-    fs.writeFileSync(preload, renderer.replace('__COLOREADER_CHANNEL__', JSON.stringify(channel)));
+    let userscript = '';
+    try {
+        const {name} = JSON.parse(fs.readFileSync(join(app.getAppPath(), 'package.json'), 'utf8'));
+        const path = join(process.env.XDG_CONFIG_HOME || join(homedir(), '.config'), 'coloreader', `${name}.js`);
+        const source = fs.existsSync(path) ? fs.readFileSync(path, 'utf8') : scripts[name];
+        if (source) userscript = `\nif (process.isMainFrame) webFrame.executeJavaScript(${JSON.stringify(source)}).catch(console.error);`;
+    } catch (error) {
+        console.error('[coloreader] userscript', error);
+    }
+    fs.writeFileSync(preload, renderer.replace('__COLOREADER_CHANNEL__', JSON.stringify(channel)) + userscript);
     process.once('exit', () => fs.rmSync(directory, {recursive: true, force: true}));
     const script = documentScript(core);
     let palette = null;

@@ -3,7 +3,7 @@ import {createHash} from 'node:crypto';
 import {mkdir, readFile, rename, writeFile} from 'node:fs/promises';
 import {createRequire, stripTypeScriptTypes} from 'node:module';
 import {resolve} from 'node:path';
-import {root, upstream, distribution} from '../scripts/upstream.mjs';
+import {root, upstream, distribution, readSiteFixes} from '../scripts/upstream.mjs';
 
 export const output = resolve(root, '.work/electron-injector');
 
@@ -22,9 +22,13 @@ export async function buildInjector({version = process.env.COLOREADER_VERSION ??
     };
     const core = await readFile(resolve(upstream, 'darkreader.js'), 'utf8');
     const renderer = await readFile(resolve(root, 'electron-injector/renderer.cjs'), 'utf8');
+    const scripts = {};
+    for (const {electron, source} of await readSiteFixes('.js')) {
+        for (const name of electron) scripts[name] = (scripts[name] ?? '') + source;
+    }
     const payload = `${await compile('main.mjs')}
 exports.version = ${JSON.stringify(version)};
-exports.start = (require) => exports.startElectronInjector(${JSON.stringify(core)}, ${JSON.stringify(renderer)}, require('electron'));`;
+exports.start = (require) => exports.startElectronInjector(${JSON.stringify(core)}, ${JSON.stringify(renderer)}, require('electron'), ${JSON.stringify(scripts)});`;
     const bootstrap = `(() => { try {
     const require = process.getBuiltinModule('module').createRequire(process.execPath);
     const load = (define) => { const module = {exports: {}}; define(require, module, module.exports); return module.exports; };
@@ -34,7 +38,8 @@ exports.start = (require) => exports.startElectronInjector(${JSON.stringify(core
 } catch (error) { if (process.env.COLOREADER_DEBUG === '1') console.error('[coloreader]', error); } })();`;
     await mkdir(output, {recursive: true});
     await writeFile(resolve(output, 'injector.cjs'), payload);
-    await writeFile(resolve(output, 'payload.h'), `static const char coloreader_payload[] = ${JSON.stringify(bootstrap)};\n`);
+    const bytes = Buffer.from(bootstrap).toString('hex').replace(/../g, '\\x$&');
+    await writeFile(resolve(output, 'payload.h'), `static const char coloreader_payload[] = "${bytes}";\n`);
     // Truncating the old file could crash an app that has it mapped.
     execFileSync(process.env.CC ?? 'cc', ['-shared', '-fPIC', '-O2', '-Wall', '-Wextra', '-Werror', '-I', output,
         '-o', resolve(output, 'libcoloreader.so.tmp'), resolve(root, 'electron-injector/injector.c')], {stdio: 'inherit'});

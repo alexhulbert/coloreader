@@ -24,3 +24,9 @@ LD_PRELOAD="$PWD/.work/electron-injector/libcoloreader.so${LD_PRELOAD:+:$LD_PREL
 | `COLOREADER_UPDATE_BASE` | Override the GitHub releases base URL |
 | `XDG_CACHE_HOME` | Cache base; defaults to `~/.cache` |
 | `XDG_RUNTIME_DIR` | Temporary preload directory |
+
+The injector also supports inject custom userscripts into applications
+with a `~/.config/coloreader/<package-name>.js` file.
+Scripts receive initial and live palettes through the document's `coloreader:theme`
+event (`JSON.parse(event.detail)`). Adding `<meta name="darkreader-lock">` disables recoloring
+while keeping palette events.

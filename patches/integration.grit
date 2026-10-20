@@ -120,11 +120,29 @@ pattern palette_default_colors() {
 pattern palette_source_import() {
     `import type {Theme, DynamicThemeFix} from '../../definitions';` =>
     `import type {Theme, DynamicThemeFix} from '../../definitions';
-    import {readPaletteSource, watchPaletteSource, paletteSourceColor} from '../../coloreader/source';`
+    import {readPaletteSource, watchPaletteSource, paletteSourceColor} from '../../coloreader/source';
+    import {applySiteFixes} from '../../coloreader/site-fixes';`
+}
+
+pattern site_fixes_extension() {
+    `selectRelevantFix(document.location.href, dynamicThemeFixes)` =>
+    `applySiteFixes(document.location.href, selectRelevantFix(document.location.href, dynamicThemeFixes))`
+}
+
+pattern site_fixes_api() {
+    or {
+        `import {DEFAULT_THEME} from '../defaults';` =>
+        `import {DEFAULT_THEME} from '../defaults';
+        import {applySiteFixes} from '../coloreader/site-fixes';`,
+        `createOrUpdateDynamicThemeInternal(theme, fixes, isIFrame)` =>
+        `createOrUpdateDynamicThemeInternal(theme, applySiteFixes(document.location.href, fixes), isIFrame)`
+    }
 }
 
 pattern palette_source_theme() {
-    `theme = themeConfig` => `theme = {...themeConfig, paletteSourceBackground: themeConfig.paletteMode ? readPaletteSource() : undefined}`
+    `theme = themeConfig` =>
+    `document.dispatchEvent(new CustomEvent('coloreader:theme', {detail: JSON.stringify(themeConfig)}));
+    theme = {...themeConfig, paletteSourceBackground: themeConfig.paletteMode ? readPaletteSource() : undefined}`
 }
 
 pattern palette_source_watch() {

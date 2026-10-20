@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {readFileSync} from 'node:fs';
-import {cp, mkdir, readFile, rm, writeFile} from 'node:fs/promises';
+import {cp, mkdir, readdir, readFile, rm, writeFile} from 'node:fs/promises';
 import {createRequire} from 'node:module';
 import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -24,7 +24,8 @@ const patches = {
     'src/inject/dynamic-theme/modify-css.ts': ['image_import', 'native_controls', 'native_control_scheme', 'canvas_color', 'link_color', 'css_color_scheme', 'scrollbar_thumb', 'palette_default_colors', 'background_images'],
     'src/inject/dynamic-theme/adopted-style-manger.ts': ['palette_adopted_cleanup'],
     'src/inject/dynamic-theme/inline-style.ts': ['inline_svg', 'inline_cache_keys', 'inline_cache_invalidation'],
-    'src/inject/dynamic-theme/index.ts': ['palette_cache_without_fixes', 'palette_render_updates', 'pdf_overlay_target', 'palette_source_import', 'palette_source_theme', 'palette_source_watch', 'palette_source_stop', 'palette_adopted_rebuild', 'palette_neutral_background', 'palette_neutral_text', 'palette_template_colors'],
+    'src/inject/dynamic-theme/index.ts': ['palette_cache_without_fixes', 'palette_render_updates', 'pdf_overlay_target', 'palette_source_import', 'site_fixes_extension', 'palette_source_theme', 'palette_source_watch', 'palette_source_stop', 'palette_adopted_rebuild', 'palette_neutral_background', 'palette_neutral_text', 'palette_template_colors'],
+    'src/api/index.ts': ['site_fixes_api'],
     'src/background/extension.ts': ['integration_import', 'start_palette', 'browser_colors', 'browser_light_target', 'pdf_target'],
     'src/background/window-theme.ts': ['browser_palette_import', 'browser_palette_colors'],
     'src/stubs/utils/theme.ts': ['stub_imports'],
@@ -35,11 +36,25 @@ const show = (commit, path) => process.env.COLOREADER_UPSTREAM_SOURCE
     ? readFileSync(resolve(process.env.COLOREADER_UPSTREAM_SOURCE, path), 'utf8')
     : git('show', `${commit}:${path}`);
 
+export async function readSiteFixes(extension) {
+    const directory = resolve(root, 'site-fixes');
+    return Promise.all((await readdir(directory)).filter((name) => name.endsWith(extension)).sort().map(async (name) => {
+        const source = await readFile(resolve(directory, name), 'utf8');
+        const values = (key) => Array.from(source.matchAll(new RegExp(`^//\\s*@${key}\\s+(\\S+)`, 'gm')), (match) => match[1]);
+        return {name, source, matches: values('match'), electron: values('electron')};
+    }));
+}
+
 // Build the patched files in memory before writing the checkout.
 async function generate(commit) {
     const {ESLint} = createRequire(resolve(upstream, 'package.json'))('eslint');
     const eslint = new ESLint({cwd: upstream, fix: true});
     const files = new Map();
+    const lint = async (path, content) => {
+        const [result] = await eslint.lintText(content, {filePath: resolve(upstream, path)});
+        assert.equal(result.errorCount, 0, `${path}: patched code fails lint\n${JSON.stringify(result.messages, null, 2)}`);
+        files.set(path, result.output ?? content);
+    };
     for (const [path, names] of Object.entries(patches)) {
         let content = show(commit, path);
         for (const name of names) {
@@ -47,22 +62,28 @@ async function generate(commit) {
             assert.ok(result, `${path}: ${name} matched nothing`);
             content = result.content;
         }
-        const [lint] = await eslint.lintText(content, {filePath: resolve(upstream, path)});
-        assert.equal(lint.errorCount, 0, `${path}: patched code fails lint\n${JSON.stringify(lint.messages, null, 2)}`);
-        files.set(path, lint.output ?? content);
+        await lint(path, content);
     }
-    // The upstream fallback flashes dark before our palette arrives.
+    const configs = (await readSiteFixes('.config')).map((fix) => fix.source);
+    await lint('src/coloreader/site-fixes.config.ts', `export default ${JSON.stringify(configs.join('\n\n================================\n\n'))};\n`);
+    const scripts = (await readSiteFixes('.js')).filter((script) => script.matches.length);
+    for (const script of scripts) {
+        files.set(`src/config/coloreader/${script.name}`, script.source);
+    }
     const manifests = {};
     for (const name of ['manifest.json', 'manifest-firefox.json', 'manifest-chrome-mv3.json']) {
         const manifest = manifests[name] = JSON.parse(show(commit, `src/${name}`));
         manifest.content_scripts = manifest.content_scripts
             .map((script) => ({...script, js: script.js.filter((file) => file !== 'inject/fallback.js')}))
             .filter((script) => script.js.length);
+        manifest.content_scripts.unshift(...scripts.map((script) => ({matches: script.matches, js: [`config/coloreader/${script.name}`], run_at: 'document_start', world: 'MAIN'})));
     }
     manifests['manifest.json'].name = manifests['manifest.json'].browser_action.default_title = 'Coloreader';
     manifests['manifest.json'].description = 'Theme websites with your system palette. Based on Dark Reader.';
     manifests['manifest-chrome-mv3.json'].action.default_title = 'Coloreader';
     manifests['manifest-firefox.json'].browser_specific_settings.gecko.id = distribution.firefoxId;
+    manifests['manifest-firefox.json'].browser_specific_settings.gecko.strict_min_version = '128.0';
+    manifests['manifest-chrome-mv3.json'].minimum_chrome_version = '111.0.0.0';
     for (const [name, manifest] of Object.entries(manifests)) {
         files.set(`src/${name}`, `${JSON.stringify(manifest, null, 4)}\n`);
     }
@@ -72,10 +93,12 @@ async function generate(commit) {
 // Start from the pinned originals so repeated patching gives the same result.
 async function patch(commit) {
     const files = await generate(commit);
+    await rm(resolve(upstream, 'src/config/coloreader'), {recursive: true, force: true});
+    await mkdir(resolve(upstream, 'src/config/coloreader'), {recursive: true});
+    await cp(resolve(root, 'patches'), upstream, {recursive: true});
     for (const [path, content] of files) {
         await writeFile(resolve(upstream, path), content);
     }
-    await cp(resolve(root, 'patches'), upstream, {recursive: true});
     console.log(`Patched ${files.size} files at ${commit}`);
 }
 

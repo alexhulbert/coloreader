@@ -19,7 +19,7 @@ in buildNpmPackage {
     root = ../.;
     fileset = lib.fileset.unions [
       ../package.json ../package-lock.json ../upstream.json
-      ../scripts ../patches ../electron-injector ../LICENSE
+      ../scripts ../patches ../site-fixes ../electron-injector ../LICENSE
     ];
   };
   nodejs = nodejs_24;
