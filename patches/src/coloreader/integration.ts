@@ -1,5 +1,7 @@
 import type {Theme, UserSettings} from '../definitions';
+import {parseToHSLWithCache} from '../utils/color';
 import {startBridgePalette} from './bridge';
+import {sourceTextPole} from './colors';
 
 interface Store {
     settings: Readonly<UserSettings>;
@@ -33,6 +35,8 @@ export function browserPaletteColors(theme: Theme, colors: Record<string, string
     }
     const background = theme.mode === 1 ? theme.darkSchemeBackgroundColor : theme.lightSchemeBackgroundColor;
     const foreground = theme.mode === 1 ? theme.darkSchemeTextColor : theme.lightSchemeTextColor;
+    const accent = theme.selectionColor === 'auto' ? foreground : theme.selectionColor;
+    const onAccent = sourceTextPole(parseToHSLWithCache(accent)!).l ? '#ffffff' : '#000000';
     return {
         ...colors,
         accentcolor: background,
@@ -45,5 +49,18 @@ export function browserPaletteColors(theme: Theme, colors: Record<string, string
         textcolor: foreground,
         toolbar_text: foreground,
         icons: foreground,
+        icons_attention: accent,
+        ntp_background: background,
+        ntp_text: foreground,
+        tab_line: accent,
+        tab_loading: accent,
+        toolbar_field_border_focus: accent,
+        toolbar_field_text_focus: foreground,
+        toolbar_field_highlight: accent,
+        toolbar_field_highlight_text: onAccent,
+        popup_highlight: accent,
+        popup_highlight_text: onAccent,
+        sidebar_highlight: accent,
+        sidebar_highlight_text: onAccent,
     };
 }

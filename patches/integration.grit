@@ -319,7 +319,7 @@ pattern browser_palette_import() {
 
 pattern browser_palette_colors() {
     `browser.theme.update({colors})` =>
-    `browser.theme.update({colors: browserPaletteColors(theme, colors)})`
+    `browser.theme.update({colors: browserPaletteColors(theme, colors), ...(theme.paletteMode && {properties: {color_scheme: theme.mode === 1 ? 'dark' : 'light', content_color_scheme: theme.mode === 1 ? 'dark' : 'light'}})})`
 }
 
 pattern pdf_target() {
