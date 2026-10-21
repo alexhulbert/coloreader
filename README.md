@@ -28,6 +28,9 @@ cargo install --path bridge/linux
 coloreader-bridge ~/.cache/coloreader.json
 ```
 
+Allow additional WebSocket origins with repeatable `--allow-origin <origin>` arguments,
+or Home Manager's `services.coloreader.allowedOrigins` list.
+
 Coloreader-bridge must be running in the background for your web browser / application to receive updates.
 
 Configure your palette generator (marugen, etc.) to write `~/.cache/coloreader.json` in this format:

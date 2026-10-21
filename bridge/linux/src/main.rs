@@ -2,18 +2,27 @@
 use std::io::ErrorKind::{TimedOut, WouldBlock};
 use std::{env, fs, net::TcpListener, thread, time::Duration};
 use tungstenite::handshake::server::{ErrorResponse, Request, Response};
-use tungstenite::{accept_hdr, http::StatusCode, Error, Message};
+use tungstenite::{Error, Message, accept_hdr, http::StatusCode};
 
 fn main() {
-    let path = env::args()
-        .nth(1)
-        .expect("usage: coloreader-bridge <palette.json>");
+    let mut args = env::args().skip(1);
+    let path = args
+        .next()
+        .expect("usage: coloreader-bridge <palette.json> [--allow-origin <origin>]...");
+    let mut allowed_origins = Vec::new();
+    while let Some(flag) = args.next() {
+        assert_eq!(flag, "--allow-origin", "unknown argument");
+        allowed_origins.push(args.next().expect("--allow-origin requires an origin"));
+    }
     let listener = TcpListener::bind("127.0.0.1:7521").expect("cannot listen on 127.0.0.1:7521");
     for stream in listener.incoming().flatten() {
         let path = path.clone();
+        let allowed_origins = allowed_origins.clone();
         thread::spawn(move || {
             stream.set_read_timeout(Some(Duration::from_secs(1))).ok();
-            let Ok(mut socket) = accept_hdr(stream, palette_client) else {
+            let Ok(mut socket) = accept_hdr(stream, |request: &Request, response| {
+                palette_client(request, response, &allowed_origins)
+            }) else {
                 return;
             };
             let mut sent = String::new();
@@ -36,11 +45,16 @@ fn main() {
     }
 }
 
-// Only allow requests with no origin header or requests from browser extensions
-fn palette_client(request: &Request, response: Response) -> Result<Response, ErrorResponse> {
+fn palette_client(
+    request: &Request,
+    response: Response,
+    allowed_origins: &[String],
+) -> Result<Response, ErrorResponse> {
     let allowed = request.headers().get("Origin").is_none_or(|value| {
         value.to_str().is_ok_and(|origin| {
-            origin.starts_with("moz-extension://") || origin.starts_with("chrome-extension://")
+            origin.starts_with("moz-extension://")
+                || origin.starts_with("chrome-extension://")
+                || allowed_origins.iter().any(|allowed| allowed == origin)
         })
     });
     if allowed {

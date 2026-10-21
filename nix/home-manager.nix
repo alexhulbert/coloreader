@@ -15,6 +15,11 @@ in {
       default = "${config.xdg.cacheHome}/coloreader.json";
       description = "Palette JSON file written by Matugen or another palette generator.";
     };
+    allowedOrigins = lib.mkOption {
+      type = lib.types.listOf lib.types.str;
+      default = [];
+      description = "Additional WebSocket origins allowed to receive palettes, matched exactly.";
+    };
     electron = {
       enable = lib.mkEnableOption "the opt-in Coloreader Electron launcher";
       package = lib.mkOption {
@@ -42,7 +47,10 @@ in {
         After = [ "graphical-session.target" ];
       };
       Service = {
-        ExecStart = "${lib.getExe cfg.package} ${lib.escapeShellArg cfg.paletteFile}";
+        ExecStart = lib.escapeShellArgs (
+          [ (lib.getExe cfg.package) cfg.paletteFile ]
+          ++ lib.concatMap (origin: [ "--allow-origin" origin ]) cfg.allowedOrigins
+        );
         Restart = "on-failure";
         RestartSec = 1;
       };
