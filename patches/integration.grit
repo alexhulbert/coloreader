@@ -198,6 +198,32 @@ pattern palette_adopted_cleanup() {
     }`
 }
 
+pattern variable_rule_update() {
+    statement_block($statements) where {
+        $statements <: [..., `oldDecs = $next;` as $assignment, `rebuildVarRule($key);` as $call, ...],
+        $assignment => `rebuildVarRule($key, oldDecs, $next);`,
+        $call => `oldDecs = $next;`
+    }
+}
+
+pattern variable_rule_properties() {
+    `function rebuildVarRule(key: number) {
+        const {rule, target, index} = varDeclarations.get(key)!;
+        target.deleteRule(index);
+        setRule(target, index, rule);
+    }` =>
+    `function rebuildVarRule(key: number, previous: ReadyDeclaration[], next: ReadyDeclaration[]) {
+        const {target, index} = varDeclarations.get(key)!;
+        const style = (target.cssRules[index] as CSSStyleRule).style;
+        previous.forEach(({property}) => style.removeProperty(property));
+        next.forEach(({property, value, important}) => {
+            if (value) {
+                style.setProperty(property, String(value), important ? 'important' : '');
+            }
+        });
+    }`
+}
+
 pattern palette_neutral_background() {
     `modifyBackgroundColor(parseColorWithCache('#ffffff')!, theme!)` =>
     `modifyBackgroundColor(paletteSourceColor(parseColorWithCache('#ffffff')!, theme!), theme!)`
