@@ -226,6 +226,84 @@ pattern variable_rule_properties() {
     }`
 }
 
+pattern scope_import() {
+    `import {getParenthesesRange} from '../../utils/text';` =>
+    `import {getParenthesesRange} from '../../utils/text';
+    import {rawColorTuple, rawColorValues, scopedTupleColor} from '../../coloreader/colors';`
+}
+
+pattern scoped_variable_color() {
+    statement_block($statements) as $block where {
+        $statements <: [`let value = insertVarValues(sourceValue, this.unstableVarValues);` as $insert, `if (!value) { $default }` as $guard, `modifiedValue = colorModifier(value, theme);` as $assign],
+        $block => `{
+            const scoped = scopedTupleColor(sourceValue, (tuple) => replaceCSSVariablesNames(tuple, varNameWrapper, (fallback) => colorModifier(fallback, theme)));
+            if (scoped) {
+                modifiedValue = scoped;
+            } else {
+                $insert
+                $guard
+                $assign
+            }
+        }`
+    }
+}
+
+pattern scoped_dependant_color() {
+    statement_block($statements) as $block where {
+        $statements <: [`let value = insertVarValues(sourceValue, this.unstableVarValues);` as $insert, `if (!value) { $default }` as $guard, `const modifier = $select;` as $modifier, `return modifier(value, theme);` as $return],
+        $block => `{
+            $modifier
+            const scoped = scopedTupleColor(sourceValue, (tuple) => replaceCSSVariablesNames(tuple, isBg ? wrapBgColorVariableName : isText ? wrapTextColorVariableName : wrapBorderColorVariableName, (fallback) => modifier(fallback, theme)));
+            if (scoped) {
+                return scoped;
+            }
+            $insert
+            $guard
+            $return
+        }`
+    }
+}
+
+pattern variable_type_closure() {
+    `this.varRefs.forEach((refs, v) => {
+        refs.forEach((r) => {
+            if (this.varTypes.has(v)) {
+                this.resolveVariableType(r, this.varTypes.get(v)!);
+            }
+        });
+    });` as $loop where {
+        $loop <: within method_definition(name=`matchVariablesAndDependents`),
+        $loop => `const queue = Array.from(this.varRefs.keys());
+        while (queue.length > 0) {
+            const v = queue.pop()!;
+            const type = this.varTypes.get(v);
+            if (type) {
+                this.varRefs.get(v)?.forEach((ref) => {
+                    const previous = this.varTypes.get(ref);
+                    this.resolveVariableType(ref, type);
+                    if (this.varTypes.get(ref) !== previous) {
+                        queue.push(ref);
+                    }
+                });
+            }
+        }`
+    }
+}
+
+pattern raw_color_delimiters() {
+    js"Number.isNaN(outputInRGB.a) || outputInRGB.a === 1 ? `${outputInRGB.r}, ${outputInRGB.g}, ${outputInRGB.b}` : `${outputInRGB.r}, ${outputInRGB.g}, ${outputInRGB.b}, ${outputInRGB.a}`" as $tuple where {
+        $tuple <: within function_declaration(name=`handleRawColorValue`),
+        $tuple => `rawColorTuple(input, outputInRGB)`
+    }
+}
+
+pattern raw_color_values() {
+    `const v = getRGBValues(input);` as $parse where {
+        $parse <: within function_declaration(name=`parseRawColorValue`),
+        $parse => `const v = rawColorValues(input);`
+    }
+}
+
 pattern palette_neutral_background() {
     `modifyBackgroundColor(parseColorWithCache('#ffffff')!, theme!)` =>
     `modifyBackgroundColor(paletteSourceColor(parseColorWithCache('#ffffff')!, theme!), theme!)`

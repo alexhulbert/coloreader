@@ -1,6 +1,29 @@
 import type {Theme} from '../definitions';
-import type {HSLA} from '../utils/color';
-import {hslToRGB, rgbToHSL, parseToHSLWithCache} from '../utils/color';
+import type {HSLA, RGBA} from '../utils/color';
+import {getRGBValues, hslToRGB, parseColorWithCache, parseToHSLWithCache, rgbToHSL} from '../utils/color';
+import {getParenthesesRange} from '../utils/text';
+
+// Selector and media overrides require a variable reference here
+export function scopedTupleColor(value: string, wrapTuple: (variable: string) => string): string | null {
+    const start = value.indexOf('var(');
+    const range = start >= 0 ? getParenthesesRange(value, start + 3) : null;
+    if (!range || !/^\s*rgba?\(\s*$/.test(value.slice(0, start)) || !/^\s*([,/][^,]*)?\)\s*$/.test(value.slice(range.end))) {
+        return null;
+    }
+    return value.slice(0, start) + wrapTuple(value.slice(start, range.end)) + value.slice(range.end);
+}
+
+export function rawColorValues(input: string): number[] | null {
+    const relative = /^\s*from\s/i.test(input) && parseColorWithCache(`rgb(${input.trim()})`);
+    return relative ? [relative.r, relative.g, relative.b, relative.a ?? 1] : getRGBValues(input);
+}
+
+// Comma-separated tuples would make rgb(var(--tuple) / alpha) invalid
+export function rawColorTuple(source: string, {r, g, b, a}: RGBA): string {
+    const comma = !/^\s*from\s/i.test(source) && source.includes(',');
+    const rgb = [r, g, b].join(comma ? ', ' : ' ');
+    return Number.isNaN(a) || a === 1 ? rgb : `${rgb}${comma ? ', ' : ' / '}${a}`;
+}
 
 type LinearRGB = [number, number, number];
 

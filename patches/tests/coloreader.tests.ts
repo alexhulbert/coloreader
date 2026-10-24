@@ -89,6 +89,21 @@ describe('COLOREADER', () => {
         expect(rgba(style('a').color)).not.toEqual(rgba(style('a').backgroundColor));
     });
 
+    it('keeps constructed colors in their own scope', async () => {
+        document.body.innerHTML = `<style>
+            body {background:#fff;color:#000} :root {--rgb:248 248 248; --bg:#f8f8f8; --bg-rgb:from var(--bg) r g b} .night {--rgb:16 18 20; --bg:#101214; --bg-rgb:from var(--bg) r g b}
+            .card {--surface:rgb(var(--rgb) / .5); --top:var(--surface)} .alias {background-color:var(--top)} .relative {background:rgba(var(--bg-rgb) / .5)}
+            .raw {background:rgb(248 248 248 / .5)} .night .raw {background:rgb(16 18 20 / .5)}
+        </style><div class="card"><div class="alias">Alias</div></div><div class="relative">Relative</div><div class="raw">Raw</div>`;
+        await render({...base, mode: 0});
+        const expectScoped = () => ['.alias', '.relative'].forEach((selector) => expect(rgba(style(selector).backgroundColor)).withContext(selector).toEqual(rgba(style('.raw').backgroundColor)));
+        expectScoped();
+        const light = style('.raw').backgroundColor;
+        document.body.classList.add('night');
+        expectScoped();
+        expect(style('.raw').backgroundColor).not.toBe(light);
+    });
+
     it('updates the same as a fresh render', async () => {
         document.body.innerHTML = '<style>body {background:#fff;color:#000} :root {--rgb:51,51,51} .raw {color:rgb(var(--rgb))} .card {background:#ddd;color:#333;box-shadow:0 0 2px #222}</style><div class="card">Card</div><span class="raw">Raw</span><span style="color:#333">Inline</span><div id="host"></div>';
         const root = document.querySelector('#host')!.attachShadow({mode: 'open'});
