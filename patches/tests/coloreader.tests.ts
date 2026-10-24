@@ -85,6 +85,17 @@ describe('COLOREADER', () => {
             const track = modifyBackgroundColor(paletteSourceColor(parseColorWithCache('#f1f1f1')!, target), target, false);
             expect(getComputedStyle(document.documentElement).scrollbarColor.match(/rgba?\([^)]*\)/g)![1]).toBe(rgbToString(parseColorWithCache(track)!));
         });
+        it(`uses the main pane as the canvas in target ${mode}`, async () => {
+            const source = mode ? '#000000' : '#ffffff';
+            document.body.innerHTML = `<style>.app {position:fixed;inset:0;background:${mode ? '#232323' : '#e2e2e2'}} .pane {position:absolute;inset:0 0 0 25%;background:${source}}</style><main class="app"></main>`;
+            await render({...base, mode});
+            document.querySelector('main')!.innerHTML = '<section class="pane">Main pane</section>';
+            await timeout(200);
+            expect(readPaletteSource()).toBe(source);
+            expect(style('.pane').backgroundColor).toBe(bg);
+            document.querySelector('main')!.insertAdjacentHTML('beforeend', '<div role="dialog" style="position:fixed;inset:0;background:#808080">Dialog</div>');
+            expect(readPaletteSource()).toBe(source);
+        });
     }
 
     it('keeps contrasting text on filled button links', async () => {

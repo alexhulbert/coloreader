@@ -32,18 +32,13 @@ export function readPaletteSource(): string {
             const rect = element.getBoundingClientRect();
             const visibleWidth = Math.min(width, rect.right) - Math.max(0, rect.left);
             const visibleHeight = Math.min(height, rect.bottom) - Math.max(0, rect.top);
-            if (width <= 0 || height <= 0 || visibleWidth < width * 0.8 || visibleHeight < height * 0.8 || element.closest('dialog, [role="dialog"]')) {
+            if (width <= 0 || height <= 0 || visibleWidth * visibleHeight <= width * height * 0.5 || element.closest('dialog, [role="dialog"]')) {
                 return null;
             }
             const color = parseColorWithCache(getComputedStyle(element).backgroundColor);
             return color?.a === 1 ? color : null;
         };
-        // Keep using the page background when a dialog covers it
         const previous = pageCanvas?.isConnected && canvasColor(pageCanvas);
-        if (previous) {
-            return rgbToHexString(previous);
-        }
-        pageCanvas = null;
         const canvases = new Map<Element, {color: RGBA; count: number}>();
         for (const [x, y] of [[0.1, 0.1], [0.5, 0.5], [0.9, 0.9]]) {
             for (const element of document.elementsFromPoint(width * x, height * y)) {
@@ -65,6 +60,11 @@ export function readPaletteSource(): string {
                 return rgbToHexString(candidate.color);
             }
         }
+        // Keep using the page background when a dialog covers it
+        if (previous) {
+            return rgbToHexString(previous);
+        }
+        pageCanvas = null;
         const rootStyle = getComputedStyle(document.documentElement);
         const schemes = rootStyle.colorScheme.split(' ');
         const dark = schemes.includes('dark') && (!schemes.includes('light') || matchMedia('(prefers-color-scheme: dark)').matches);
