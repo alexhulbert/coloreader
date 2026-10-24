@@ -93,7 +93,8 @@ pattern image_import() {
     `import type {Theme} from '../../definitions';` =>
     `import type {Theme} from '../../definitions';
     import {paletteImageValue} from '../../coloreader/images';
-    import {paletteSourceColor} from '../../coloreader/source';`
+    import {paletteSourceColor} from '../../coloreader/source';
+    import {isLinkColor, linkColor} from '../../coloreader/links';`
 }
 
 // Map generated colors from a white background to the page background
@@ -121,7 +122,8 @@ pattern palette_source_import() {
     `import type {Theme, DynamicThemeFix} from '../../definitions';` =>
     `import type {Theme, DynamicThemeFix} from '../../definitions';
     import {readPaletteSource, watchPaletteSource, paletteSourceColor} from '../../coloreader/source';
-    import {applySiteFixes} from '../../coloreader/site-fixes';`
+    import {applySiteFixes} from '../../coloreader/site-fixes';
+    import {linkScope} from '../../coloreader/links';`
 }
 
 pattern site_fixes_extension() {
@@ -257,13 +259,25 @@ pattern native_control_scheme() {
     js"`    color-scheme: ${theme.mode === 1 ? 'dark' : 'light'} !important;`"
 }
 
-// Links follow the system accent when one is supplied
 pattern link_color() {
-    js"lines.push('a {');" =>
-    js"if (theme.paletteMode && theme.selectionColor !== 'auto') {
-        lines.push(`a { color: ${theme.selectionColor} !important; }`);
+    js"lines.push(`    color: ${modifyForegroundColor(paletteSourceColor({r: 0, g: 64, b: 255}, theme), theme)};`);" =>
+    js"lines.push(`    color: ${linkColor(modifyForegroundColor(paletteSourceColor({r: 0, g: 64, b: 255}, theme), theme))};`);"
+}
+
+pattern link_scope() {
+    `inlineStyle.textContent = getInlineOverrideStyle()` => `inlineStyle.textContent = getInlineOverrideStyle() + linkScope(theme!)`
+}
+
+pattern link_declaration() {
+    `return {property, value: modifier, important: getPriority(rule.style, property), sourceValue: value}` =>
+    `if ((property === 'color' || property === '-webkit-text-fill-color') && typeof modifier === 'function' && isLinkColor(value)) {
+        const textModifier = modifier as CSSValueModifier;
+        modifier = (theme: Theme) => {
+            const color = textModifier(theme);
+            return theme.paletteMode && typeof color === 'string' ? linkColor(color) : color;
+        };
     }
-    lines.push('a {');"
+    return {property, value: modifier, important: getPriority(rule.style, property), sourceValue: value}`
 }
 
 // Set the background color to the exact specified background

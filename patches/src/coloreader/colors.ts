@@ -14,12 +14,12 @@ function encode(value: number): number {
     return 255 * (value <= 0.0031308 ? 12.92 * value : 1.055 * value ** (1 / 2.4) - 0.055);
 }
 
-function linearRGB(color: HSLA): LinearRGB {
+export function linearRGB(color: HSLA): LinearRGB {
     const {r, g, b} = hslToRGB(color);
     return [linearize(r), linearize(g), linearize(b)];
 }
 
-function luminance([r, g, b]: LinearRGB): number {
+export function luminance([r, g, b]: LinearRGB): number {
     return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
