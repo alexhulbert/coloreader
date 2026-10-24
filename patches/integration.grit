@@ -226,6 +226,14 @@ pattern variable_rule_properties() {
     }`
 }
 
+pattern color_parser_alpha() {
+    `context.fillStyle = $color;` as $fill where {
+        $fill <: within function_declaration(name=`domParseColor`),
+        $fill => `context.clearRect(0, 0, 1, 1);
+        $fill`
+    }
+}
+
 pattern scope_import() {
     `import {getParenthesesRange} from '../../utils/text';` =>
     `import {getParenthesesRange} from '../../utils/text';

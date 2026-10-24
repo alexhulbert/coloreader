@@ -6,7 +6,7 @@ import {paletteSourceColor, readPaletteSource} from '../src/coloreader/source';
 import {paletteImageAction} from '../src/coloreader/images';
 import {modifyBackgroundColor, modifyForegroundColor} from '../src/inject/dynamic-theme/modify-colors';
 import type {ImageDetails} from '../src/inject/dynamic-theme/image';
-import {parseColorWithCache, rgbToString} from '../src/utils/color';
+import {clearColorCache, parseColorWithCache, rgbToString} from '../src/utils/color';
 import {timeout} from './inject/support/test-utils';
 
 describe('COLOREADER', () => {
@@ -33,6 +33,12 @@ describe('COLOREADER', () => {
         document.documentElement.removeAttribute('data-source-theme');
         document.head.querySelectorAll('style.source').forEach((node) => node.remove());
         document.adoptedStyleSheets = [];
+    });
+
+    it('keeps alpha when parsing relative colors', () => {
+        clearColorCache();
+        parseColorWithCache('hsl(from black h s l)');
+        expect(parseColorWithCache('hsl(from #fff h s l / 5%)')).toEqual({r: 255, g: 255, b: 255, a: 0.05});
     });
 
     for (const mode of [0, 1] as const) {

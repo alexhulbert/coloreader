@@ -20,6 +20,7 @@ const patches = {
     'src/defaults.ts': ['default_theme', 'default_settings'],
     'src/definitions.d.ts': ['theme_type'],
     'src/utils/validation.ts': ['validate_palette'],
+    'src/utils/color.ts': ['color_parser_alpha'],
     'src/inject/dynamic-theme/modify-colors.ts': ['color_import', 'palette_color_cache_keys', 'palette_color_context', 'background_color', 'foreground_color', 'border_color', 'shadow_color'],
     'src/inject/dynamic-theme/modify-css.ts': ['image_import', 'native_controls', 'native_control_scheme', 'canvas_color', 'link_declaration', 'css_color_scheme', 'scrollbar_thumb', 'palette_default_colors', 'link_color', 'background_images'],
     'src/inject/dynamic-theme/adopted-style-manger.ts': ['palette_adopted_cleanup'],
