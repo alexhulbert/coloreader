@@ -237,14 +237,14 @@ pattern color_parser_alpha() {
 pattern scope_import() {
     `import {getParenthesesRange} from '../../utils/text';` =>
     `import {getParenthesesRange} from '../../utils/text';
-    import {rawColorTuple, rawColorValues, scopedTupleColor} from '../../coloreader/colors';`
+    import {hslTupleToRGB, rawColorTuple, rawColorValues, scopedTupleColor} from '../../coloreader/colors';`
 }
 
 pattern scoped_variable_color() {
     statement_block($statements) as $block where {
         $statements <: [`let value = insertVarValues(sourceValue, this.unstableVarValues);` as $insert, `if (!value) { $default }` as $guard, `modifiedValue = colorModifier(value, theme);` as $assign],
         $block => `{
-            const scoped = scopedTupleColor(sourceValue, (tuple) => replaceCSSVariablesNames(tuple, varNameWrapper, (fallback) => colorModifier(fallback, theme)));
+            const scoped = scopedTupleColor(sourceValue, (tuple, hsl) => replaceCSSVariablesNames(tuple, (v) => varNameWrapper(hsl ? '-hsl' + v : v), (fallback) => colorModifier(hsl ? hslTupleToRGB(fallback) : fallback, theme)));
             if (scoped) {
                 modifiedValue = scoped;
             } else {
@@ -261,7 +261,8 @@ pattern scoped_dependant_color() {
         $statements <: [`let value = insertVarValues(sourceValue, this.unstableVarValues);` as $insert, `if (!value) { $default }` as $guard, `const modifier = $select;` as $modifier, `return modifier(value, theme);` as $return],
         $block => `{
             $modifier
-            const scoped = scopedTupleColor(sourceValue, (tuple) => replaceCSSVariablesNames(tuple, isBg ? wrapBgColorVariableName : isText ? wrapTextColorVariableName : wrapBorderColorVariableName, (fallback) => modifier(fallback, theme)));
+            const wrapVariable = isBg ? wrapBgColorVariableName : isText ? wrapTextColorVariableName : wrapBorderColorVariableName;
+            const scoped = scopedTupleColor(sourceValue, (tuple, hsl) => replaceCSSVariablesNames(tuple, (v) => wrapVariable(hsl ? '-hsl' + v : v), (fallback) => modifier(hsl ? hslTupleToRGB(fallback) : fallback, theme)));
             if (scoped) {
                 return scoped;
             }
@@ -272,16 +273,60 @@ pattern scoped_dependant_color() {
     }
 }
 
+pattern hsl_variable_type() {
+    `const VAR_TYPE_BG_IMG = 1 << 3;` =>
+    `const VAR_TYPE_BG_IMG = 1 << 3;
+    const VAR_TYPE_HSL = 1 << 4;`
+}
+
+pattern hsl_variable_usage() {
+    `private inspectVarDependant(property: string, value: string) { $body }` =>
+    `private inspectVarDependant(property: string, value: string) {
+        if (/^hsla?\\(/i.test(value)) {
+            scopedTupleColor(value, (tuple, hsl) => {
+                if (hsl) {
+                    this.iterateVarDeps(tuple, (v) => {
+                        this.resolveVariableType(v, VAR_TYPE_HSL);
+                        this.unknownColorVars.add(v);
+                    });
+                }
+                return tuple;
+            });
+        }
+        $body
+    }`
+}
+
+pattern hsl_variable_declarations() {
+    `addModifiedValue(VAR_TYPE_BORDER_COLOR, wrapBorderColorVariableName, tryModifyBorderColor);` =>
+    `addModifiedValue(VAR_TYPE_BORDER_COLOR, wrapBorderColorVariableName, tryModifyBorderColor);
+    if (this.isVarType(varName, VAR_TYPE_HSL)) {
+        addModifiedValue(VAR_TYPE_BG_COLOR, (v) => wrapBgColorVariableName('-hsl' + v), (c, t) => tryModifyBgColor(hslTupleToRGB(c), t));
+        addModifiedValue(VAR_TYPE_TEXT_COLOR, (v) => wrapTextColorVariableName('-hsl' + v), (c, t) => tryModifyTextColor(hslTupleToRGB(c), t));
+        addModifiedValue(VAR_TYPE_BORDER_COLOR, (v) => wrapBorderColorVariableName('-hsl' + v), (c, t) => tryModifyBorderColor(hslTupleToRGB(c), t));
+    }`
+}
+
+pattern hsl_root_variables() {
+    `declarations.set($wrap(property), $modify(value, theme));` as $set where {
+        $set => `$set
+        if (this.isVarType(property, VAR_TYPE_HSL)) {
+            declarations.set($wrap('-hsl' + property), $modify(hslTupleToRGB(value), theme));
+        }`
+    }
+}
+
 pattern variable_type_closure() {
-    `this.varRefs.forEach((refs, v) => {
-        refs.forEach((r) => {
-            if (this.varTypes.has(v)) {
-                this.resolveVariableType(r, this.varTypes.get(v)!);
-            }
-        });
-    });` as $loop where {
-        $loop <: within method_definition(name=`matchVariablesAndDependents`),
-        $loop => `const queue = Array.from(this.varRefs.keys());
+    statement_block($statements) where {
+        $statements <: [..., `this.varRefs.forEach((refs, v) => {
+            refs.forEach((r) => {
+                if (this.varTypes.has(v)) {
+                    this.resolveVariableType(r, this.varTypes.get(v)!);
+                }
+            });
+        });` as $scan_loop, ..., `this.changedTypeVars.forEach((varName) => { $notify });` as $notify_loop, ...],
+        $scan_loop => .,
+        $notify_loop => `const queue = Array.from(this.varRefs.keys());
         while (queue.length > 0) {
             const v = queue.pop()!;
             const type = this.varTypes.get(v);
@@ -294,7 +339,8 @@ pattern variable_type_closure() {
                     }
                 });
             }
-        }`
+        }
+        $notify_loop`
     }
 }
 

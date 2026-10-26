@@ -4,7 +4,7 @@ import {getRGBValues, hslToRGB, parseColorWithCache, parseToHSLWithCache, rgbToH
 import {getParenthesesRange} from '../utils/text';
 
 // Selector and media overrides require a variable reference here
-export function scopedTupleColor(value: string, wrapVariable: (variable: string) => string): string | null {
+export function scopedTupleColor(value: string, wrapVariable: (variable: string, hsl: boolean) => string): string | null {
     const start = value.indexOf('var(');
     const range = start >= 0 ? getParenthesesRange(value, start + 3) : null;
     if (!range) {
@@ -12,12 +12,18 @@ export function scopedTupleColor(value: string, wrapVariable: (variable: string)
     }
     const prefix = value.slice(0, start);
     const suffix = value.slice(range.end);
-    const tuple = /^\s*rgba?\(\s*$/.test(prefix) && /^\s*([,/][^,]*)?\)\s*$/.test(suffix);
+    const tuple = /^\s*(?:rgb|hsl)a?\(\s*$/i.test(prefix) && /^\s*([,/][^,]*)?\)\s*$/.test(suffix);
     const relative = /^\s*rgba?\(\s*from\s+$/i.test(prefix) && /^\s+r\s+g\s+b\s*(?:\/[\s\S]+)?\)\s*$/i.test(suffix);
     if (!tuple && !relative) {
         return null;
     }
-    return prefix + wrapVariable(value.slice(start, range.end)) + suffix;
+    const hsl = tuple && /^\s*hsl/i.test(prefix);
+    return (hsl ? prefix.replace(/hsl/i, 'rgb') : prefix) + wrapVariable(value.slice(start, range.end), hsl) + suffix;
+}
+
+export function hslTupleToRGB(value: string): string {
+    const color = parseColorWithCache(`hsl(${value})`);
+    return color ? rawColorTuple(value, color) : value;
 }
 
 export function rawColorValues(input: string): number[] | null {
