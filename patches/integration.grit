@@ -481,7 +481,8 @@ pattern pdf_overlay_target() {
 pattern integration_import() {
     `import UserStorage from './user-storage';` =>
     `import UserStorage from './user-storage';
-    import {startPaletteIntegration, browserTheme} from '../coloreader/integration';`
+    import {startPaletteIntegration, browserTheme} from '../coloreader/integration';
+    import {registerToolbar, removeContextMenus} from '../coloreader/toolbar';`
 }
 
 pattern start_palette() {
@@ -524,4 +525,24 @@ pattern stub_imports() {
         $path <: r"'([a-z].*)'"($module),
         $path => `'../../$module'`
     }
+}
+
+pattern toolbar_init() {
+    `chrome.alarms.onAlarm.addListener(Extension.alarmListener)` =>
+    `registerToolbar(Extension.onCommand);
+    chrome.alarms.onAlarm.addListener(Extension.alarmListener)`
+}
+
+pattern toolbar_menus() {
+    or {
+        `chrome.contextMenus.removeAll` => `removeContextMenus`,
+        `'Dark Reader'` => `'Coloreader'`
+    }
+}
+
+pattern site_icon() {
+    `if (tabId) { return; }` => `if (tabId) {
+        chrome.browserAction.setIcon({tabId, path: isActive ? this.ICON_PATHS.activeDark : this.ICON_PATHS.activeLight});
+        return;
+    }`
 }

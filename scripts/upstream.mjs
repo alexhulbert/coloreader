@@ -29,7 +29,8 @@ const patches = {
     'src/inject/dynamic-theme/inline-style.ts': ['inline_svg', 'inline_cache_keys', 'inline_cache_invalidation'],
     'src/inject/dynamic-theme/index.ts': ['palette_cache_without_fixes', 'palette_render_updates', 'pdf_overlay_target', 'palette_source_import', 'link_scope', 'site_fixes_extension', 'palette_source_theme', 'palette_source_watch', 'palette_source_stop', 'palette_adopted_rebuild', 'palette_neutral_background', 'palette_neutral_text', 'palette_template_colors'],
     'src/api/index.ts': ['site_fixes_api'],
-    'src/background/extension.ts': ['integration_import', 'start_palette', 'browser_colors', 'browser_light_target', 'pdf_target'],
+    'src/background/extension.ts': ['integration_import', 'start_palette', 'browser_colors', 'browser_light_target', 'pdf_target', 'toolbar_init', 'toolbar_menus'],
+    'src/background/icon-manager.ts': ['site_icon'],
     'src/background/window-theme.ts': ['browser_palette_import', 'browser_palette_colors'],
     'src/stubs/utils/theme.ts': ['stub_imports'],
 };
@@ -87,6 +88,16 @@ async function generate(commit) {
     manifests['manifest-firefox.json'].browser_specific_settings.gecko.id = distribution.firefoxId;
     manifests['manifest-firefox.json'].browser_specific_settings.gecko.strict_min_version = '128.0';
     manifests['manifest-chrome-mv3.json'].minimum_chrome_version = '111.0.0.0';
+    delete manifests['manifest.json'].browser_action.default_popup;
+    delete manifests['manifest-chrome-mv3.json'].action.default_popup;
+    for (const manifest of Object.values(manifests)) {
+        if (!manifest.permissions.includes('contextMenus')) {
+            manifest.permissions.push('contextMenus');
+        }
+        if (manifest.optional_permissions) {
+            manifest.optional_permissions = manifest.optional_permissions.filter((permission) => permission !== 'contextMenus');
+        }
+    }
     for (const [name, manifest] of Object.entries(manifests)) {
         files.set(`src/${name}`, `${JSON.stringify(manifest, null, 4)}\n`);
     }

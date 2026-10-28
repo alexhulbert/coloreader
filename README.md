@@ -15,6 +15,10 @@ Download your browser's package from [Releases](https://github.com/alexhulbert/c
 
 Then, run the correct coloreader bridge for your operating system.
 
+Click the toolbar icon to toggle Coloreader for the current site. Right-click the
+icon and choose **Open popup** to access its controls. The icon reflects whether
+Coloreader is enabled for the current site.
+
 ## System colors
 
 **Android 12+:** install the [bridge APK](https://github.com/alexhulbert/coloreader/releases/download/bridge/coloreader-bridge.apk)
