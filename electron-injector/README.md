@@ -30,3 +30,8 @@ with a `~/.config/coloreader/<package-name>.js` file.
 Scripts receive initial and live palettes through the document's `coloreader:theme`
 event (`JSON.parse(event.detail)`). Adding `<meta name="darkreader-lock">` disables recoloring
 while keeping palette events.
+
+`~/.config/coloreader/<package-name>.main.cjs` runs in the main process during
+injection. Export a function receiving `{app, ipcMain, nativeTheme, webContents}`.
+It has Node access and can install hooks before bundles loaded after injection.
+The native bootstrap loads this hook before selecting downloaded palette code.
